@@ -47,6 +47,19 @@ def generate_data(data, n):
     return result
 
 
+def learn_model(data, hidden_nodes, verbose=False):
+    x_data = data[:, :-4]
+    y_data = data[:, -4:]
+    num_classes = len(y_data[0])
+    w1 = np.random.rand(hidden_nodes)
+    b1 = np.random.rand(hidden_nodes)
+    w2 = np.random.rand(num_classes)
+    b2 = np.random.rand(num_classes)
+    epsilon, alpha, previous_error = 1E-07, 0.1, 0.0
+    while abs(current_error - previous_error) > epsilon:
+    pass
+
+
 # This function is to convert the data structure from generate_data() into an easier to use numpy matrix
 def transform_data(data: List[Tuple[List, List]]) -> List:
     datum = np.empty(len(data[0][0]) + 1)
@@ -88,4 +101,5 @@ if __name__ == "__main__":
 
     data = generate_data(clean_data, 100)
     datum = transform_data(data)
+    model = learn_model(datum, 2)
     print(datum)
