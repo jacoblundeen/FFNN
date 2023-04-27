@@ -53,13 +53,14 @@ def softmax(Z: List) -> List:
 
 
 def sigmoid(z):
-    return 1.0 / (1 + np.exp(z))
+    # temp = np.exp(-z, out=z, where=z < 1)
+    return 1.0 / (1 + np.exp(-z))
 
 
-def forward_prop(x_data: List[List], w1: List, b1: List, w2: List, b2: List) -> Tuple:
-    z1 = w1.dot(x_data.T) + b1
+def forward_prop(x_data: List[List], w1: List, w2: List) -> Tuple:
+    z1 = w1.dot(x_data.T)
     a1 = sigmoid(z1)
-    z2 = w2.dot(a1) + b2
+    z2 = w2.dot(a1)
     a2 = softmax(z2)
     return z1, a1, z2, a2
 
@@ -78,41 +79,45 @@ def sigmoid_deriv(z):
 
 def backward_prop(z1, a1, z2, a2, w1, w2, x_data, y_data):
     m, _ = x_data.shape
-    dz2 = a2 - y_data.T
-    dw2 = 1 / m * dz2.dot(a1.T)
-    db2 = 1 / m * np.sum(dz2, axis=1)
-    dz1 = w2.T.dot(dz2) * sigmoid_deriv(z1)
-    dw1 = 1 / m * dz1.dot(x_data)
-    db1 = 1 / m * np.sum(dz1, axis=1)
-    return dw1, db1, dw2, db2
+    dw2 = sigmoid_deriv(a2) * (y_data.T - a2)
+    dw1 = sigmoid_deriv(a1) * w2.T.dot(dw2)
+    # db2 = 1 / m * np.sum(dz2, axis=1)
+    # dz1 = w2.T.dot(dz2) * sigmoid_deriv(z1)
+    # dw1 = 1 / m * dz1.dot(x_data)
+    # db1 = 1 / m * np.sum(dz1, axis=1)
+    return dw1, dw2
 
 
-def update_params(w1, b1, w2, b2, dw1, db1, dw2, db2, alpha):
-    w1 -= alpha * dw1
-    b1 -= alpha * np.expand_dims(db1, axis=1)
-    w2 -= alpha * dw2
-    b2 -= alpha * np.expand_dims(db2, axis=1)
-    return w1, b1, w2, b2
+def update_params(w1, w2, dw1, dw2, a1, a2, alpha, x_data):
+    w1 += alpha * dw1.dot(x_data)
+    # b1 -= alpha * np.expand_dims(db1, axis=1)
+    w2 += alpha * dw2.dot(a1.T)
+    # b2 -= alpha * np.expand_dims(db2, axis=1)
+    return w1, w2
 
 
 def learn_model(data, hidden_nodes, verbose=False):
-    x_data = data[:, :-4]
+    x_data = np.append(np.ones([len(data), 1]), data[:, :-4], axis=1)
     y_data = data[:, -4:]
     m, n = x_data.shape
     num_classes = len(y_data[0])
     w1 = np.random.rand(hidden_nodes, n)
-    b1 = np.random.rand(hidden_nodes, 1)
+    # b1 = np.random.rand(hidden_nodes, 1)
     w2 = np.random.rand(num_classes, hidden_nodes)
-    b2 = np.random.rand(num_classes, 1)
+    # b2 = np.random.rand(num_classes, 1)
     epsilon, alpha, previous_error = 1E-07, 0.01, 0.0
-    current_error = 1
+    current_error = 10
     count = 0
     while abs(current_error - previous_error) > epsilon:
-        z1, a1, z2, a2 = forward_prop(x_data, w1, b1, w2, b2)
-        dw1, db1, dw2, db2 = backward_prop(z1, a1, z2, a2, w1, w2, x_data, y_data)
-        w1, b1, w2, b2 = update_params(w1, b1, w2, b2, dw1, db1, dw2, db2, alpha)
+        z1, a1, z2, a2 = forward_prop(x_data, w1, w2)
+        dw1, dw2 = backward_prop(z1, a1, z2, a2, w1, w2, x_data, y_data)
+        w1, w2 = update_params(w1, w2, dw1, dw2, a1, a2, alpha, x_data)
         previous_error = current_error
         current_error = calculate_error(y_data, a2)
+        if verbose and count % 1000 == 0:
+            print("The current error is: " + str(current_error))
+        if current_error > previous_error:
+            alpha = alpha / 10
         count += 1
     print(count)
     return a2
@@ -159,5 +164,5 @@ if __name__ == "__main__":
 
     data = generate_data(clean_data, 100)
     datum = transform_data(data)
-    model = learn_model(datum, 2)
+    model = learn_model(datum, 2, True)
     print(model)
