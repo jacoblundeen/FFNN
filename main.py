@@ -2,7 +2,7 @@ import numpy as np
 import random
 from typing import List, Tuple, Dict, Callable
 
-random.seed(49)
+random.seed(1234)
 
 
 def blur(data):
@@ -48,12 +48,10 @@ def generate_data(data, n):
 
 
 def softmax(Z: List) -> List:
-    A = np.exp(Z) / sum(np.exp(Z))
-    return A
+    return np.exp(Z) / sum(np.exp(Z))
 
 
-def sigmoid(z):
-    # temp = np.exp(-z, out=z, where=z < 1)
+def sigmoid(z: List) -> List:
     return 1.0 / (1 + np.exp(-z))
 
 
@@ -62,56 +60,48 @@ def forward_prop(x_data: List[List], w1: List, w2: List) -> Tuple:
     a1 = sigmoid(z1)
     z2 = w2.dot(a1)
     a2 = softmax(z2)
-    return z1, a1, z2, a2
+    return a1, a2
 
 
 def calculate_error(y_data: List, a2: List) -> float:
-    n = len(y_data)
     temp = np.subtract(1, a2)
     temp2 = np.log(temp, out=temp, where=temp > 0)
-    error = (-1 / n) * np.sum(y_data * np.log(a2.T) + np.subtract(1, y_data) * temp2.T)
+    error = (-1 / len(y_data)) * np.sum(y_data * np.log(a2.T) + np.subtract(1, y_data) * temp2.T)
     return error
 
 
-def sigmoid_deriv(z):
+def one_hot(a2: List) -> List:
+    return np.identity(4)[np.argmax(a2, axis=0)]
+
+
+def sigmoid_deriv(z: List) -> List:
     return z * (1 - z)
 
 
-def backward_prop(z1, a1, z2, a2, w1, w2, x_data, y_data):
-    m, _ = x_data.shape
+def backward_prop(a1: List, a2: List, w2: List, y_data: List) -> Tuple:
     dw2 = sigmoid_deriv(a2) * (y_data.T - a2)
     dw1 = sigmoid_deriv(a1) * w2.T.dot(dw2)
-    # db2 = 1 / m * np.sum(dz2, axis=1)
-    # dz1 = w2.T.dot(dz2) * sigmoid_deriv(z1)
-    # dw1 = 1 / m * dz1.dot(x_data)
-    # db1 = 1 / m * np.sum(dz1, axis=1)
     return dw1, dw2
 
 
-def update_params(w1, w2, dw1, dw2, a1, a2, alpha, x_data):
+def update_params(w1: List, w2: List, dw1: List, dw2: List, a1: List, alpha: float, x_data: List[List]) -> Tuple:
     w1 += alpha * dw1.dot(x_data)
-    # b1 -= alpha * np.expand_dims(db1, axis=1)
     w2 += alpha * dw2.dot(a1.T)
-    # b2 -= alpha * np.expand_dims(db2, axis=1)
     return w1, w2
 
 
-def learn_model(data, hidden_nodes, verbose=False):
-    x_data = np.append(np.ones([len(data), 1]), data[:, :-4], axis=1)
-    y_data = data[:, -4:]
-    m, n = x_data.shape
-    num_classes = len(y_data[0])
-    w1 = np.random.rand(hidden_nodes, n)
-    # b1 = np.random.rand(hidden_nodes, 1)
-    w2 = np.random.rand(num_classes, hidden_nodes)
-    # b2 = np.random.rand(num_classes, 1)
+def learn_model(data: List[List], hidden_nodes: int, verbose=False) -> Tuple[List, List]:
+    trans_data = transform_data(data)
+    x_data = np.append(np.ones([len(data), 1]), trans_data[:, :-4], axis=1)
+    y_data = trans_data[:, -4:]
+    w1 = np.random.rand(hidden_nodes, x_data.shape[1])
+    w2 = np.random.rand(len(y_data[0]), hidden_nodes)
     epsilon, alpha, previous_error = 1E-07, 0.01, 0.0
-    current_error = 10
-    count = 0
+    current_error, count = 10, 0
     while abs(current_error - previous_error) > epsilon:
-        z1, a1, z2, a2 = forward_prop(x_data, w1, w2)
-        dw1, dw2 = backward_prop(z1, a1, z2, a2, w1, w2, x_data, y_data)
-        w1, w2 = update_params(w1, w2, dw1, dw2, a1, a2, alpha, x_data)
+        a1, a2 = forward_prop(x_data, w1, w2)
+        dw1, dw2 = backward_prop(a1, a2, w2, y_data)
+        w1, w2 = update_params(w1, w2, dw1, dw2, a1, alpha, x_data)
         previous_error = current_error
         current_error = calculate_error(y_data, a2)
         if verbose and count % 1000 == 0:
@@ -119,8 +109,39 @@ def learn_model(data, hidden_nodes, verbose=False):
         if current_error > previous_error:
             alpha = alpha / 10
         count += 1
-    print(count)
-    return a2
+    return w1, w2
+
+
+def apply_model(model: Tuple[List, List], test_data: List[List], labeled=False) -> List[List[Tuple]]:
+    trans_data = transform_data(test_data)
+    x_data = np.append(np.ones([len(test_data), 1]), trans_data[:, :-4], axis=1)
+    y_data = trans_data[:, -4:]
+    _, y_hat = forward_prop(x_data, model[0], model[1])
+    y_ehat = one_hot(y_hat)
+    if labeled:
+        return format_output(y_data, y_ehat)
+    else:
+        return format_output(y_ehat, np.round(y_hat.T, 2))
+
+
+def format_output(y_data1: List, y_data2: List) -> List[List[Tuple]]:
+    results = []
+    for i in range(len(y_data1)):
+        temp = []
+        for j in range(len(y_data1[i])):
+            temp.append((y_data1[i, j], y_data2[i, j]))
+        results.append(temp)
+    return results
+
+
+def evaluate(results: List[List[Tuple]]):
+    count = 0
+    n = len(results)
+    for result in results:
+        if (1.0, 1.0) in result:
+            count += 1
+    e_rate = round((1 - (count / n)), 4) * 100
+    print("The error rate is: " + str(e_rate) + "%")
 
 
 # This function is to convert the data structure from generate_data() into an easier to use numpy matrix
@@ -162,7 +183,8 @@ if __name__ == "__main__":
         ]
     }
 
-    data = generate_data(clean_data, 100)
-    datum = transform_data(data)
-    model = learn_model(datum, 2, True)
-    print(model)
+    train_data = generate_data(clean_data, 100)
+    test_data = generate_data(clean_data, 100)
+    model = learn_model(train_data, 2, True)
+    results = apply_model(model, test_data, True)
+    evaluate(results)
